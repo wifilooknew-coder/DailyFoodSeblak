@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pemasukan & Pengeluaran</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #ffc0cb, #ffffff);
+      margin: 0;
+      padding: 20px;
+    }
+    h2 {
+      text-align: center;
+      color: #d63384;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #f8bbd0;
+      color: #333;
+    }
+    input, select {
+      padding: 5px;
+      width: 90%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .total-box {
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .btn {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+    }
+    .btn-add { background: #ff80ab; color: white; }
+    .btn-reset { background: #f06292; color: white; }
+  </style>
+</head>
+<body>
+
+  <h2>Tabel Pemasukan</h2>
+  <table id="pemasukanTable">
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th>Cash (Rp)</th>
+        <th>Transfer (Rp)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button class="btn btn-add" onclick="tambahBaris('pemasukan')">+ Tambah Pemasukan</button>
+
+  <div class="total-box">
+    <p>Total Cash: <span id="totalCash">0</span></p>
+    <p>Total Transfer: <span id="totalTransfer">0</span></p>
+    <p><b>Overall Total: <span id="overallTotal">0</span></b></p>
+  </div>
+
+  <h2>Tabel Pengeluaran</h2>
+  <table id="pengeluaranTable">
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th>Waktu</th>
+        <th>Harga (Rp)</th>
+        <th>Keterangan</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button class="btn btn-add" onclick="tambahBaris('pengeluaran')">+ Tambah Pengeluaran</button>
+
+  <div class="total-box">
+    <p>Total Pengeluaran: <span id="totalPengeluaran">0</span></p>
+    <p><b>Total Bersih: <span id="totalBersih">0</span></b></p>
+  </div>
+
+  <button class="btn btn-reset" onclick="resetData()">Reset Semua</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB-CqU_lrReoWaJX6ZNBLUuzM-OnlU5ofU",
+      authDomain: "dailyfood-401d6.firebaseapp.com",
+      databaseURL: "https://dailyfood-401d6-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "dailyfood-401d6",
+      storageBucket: "dailyfood-401d6.appspot.com",
+      messagingSenderId: "498760122217",
+      appId: "1:498760122217:web:f84a7cc4c1784f1bd347f8"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const pemasukanRef = ref(db, "keuangan/pemasukan");
+    const pengeluaranRef = ref(db, "keuangan/pengeluaran");
+
+    function formatRupiah(angka) {
+      return angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+    function parseRupiah(str) {
+      return parseInt(str.replace(/\./g, "")) || 0;
+    }
+
+    // Tambah Baris
+    window.tambahBaris = function(tipe) {
+      let tbody = document.querySelector(`#${tipe}Table tbody`);
+      let row = document.createElement("tr");
+
+      if (tipe === "pemasukan") {
+        row.innerHTML = `
+          <td><input type="date" onchange="simpanSemua()"></td>
+          <td><input type="text" class="rupiah" oninput="formatInput(this); simpanSemua()"></td>
+          <td><input type="text" class="rupiah" oninput="formatInput(this); simpanSemua()"></td>
+        `;
+      } else {
+        row.innerHTML = `
+          <td><input type="date" onchange="simpanSemua()"></td>
+          <td>
+            <select onchange="simpanSemua()">
+              <option value="siang">Siang</option>
+              <option value="malam">Malam</option>
+            </select>
+          </td>
+          <td><input type="text" class="rupiah" oninput="formatInput(this); simpanSemua()"></td>
+          <td><input type="text" oninput="simpanSemua()"></td>
+        `;
+      }
+      tbody.appendChild(row);
+    };
+
+    // Format input jadi ribuan
+    window.formatInput = function(el) {
+      let val = el.value.replace(/\./g, "");
+      if (!isNaN(val) && val !== "") {
+        el.value = formatRupiah(val);
+      } else {
+        el.value = "";
+      }
+    };
+
+    // Simpan dengan debounce
+    let simpanTimer;
+    window.simpanSemua = function() {
+      clearTimeout(simpanTimer);
+      simpanTimer = setTimeout(() => {
+        let pemasukanData = [];
+        document.querySelectorAll("#pemasukanTable tbody tr").forEach(row => {
+          let tgl = row.cells[0].querySelector("input").value;
+          let cash = parseRupiah(row.cells[1].querySelector("input").value);
+          let transfer = parseRupiah(row.cells[2].querySelector("input").value);
+          pemasukanData.push({ tanggal: tgl, cash, transfer });
+        });
+
+        let pengeluaranData = [];
+        document.querySelectorAll("#pengeluaranTable tbody tr").forEach(row => {
+          let tgl = row.cells[0].querySelector("input").value;
+          let waktu = row.cells[1].querySelector("select").value;
+          let harga = parseRupiah(row.cells[2].querySelector("input").value);
+          let ket = row.cells[3].querySelector("input").value;
+          pengeluaranData.push({ tanggal: tgl, waktu, harga, keterangan: ket });
+        });
+
+        set(pemasukanRef, pemasukanData);
+        set(pengeluaranRef, pengeluaranData);
+      }, 3000);
+    };
+
+    // Hitung Total
+    function hitungTotal(pemasukan, pengeluaran) {
+      let totalCash = pemasukan.reduce((sum, d) => sum + d.cash, 0);
+      let totalTransfer = pemasukan.reduce((sum, d) => sum + d.transfer, 0);
+      let overall = totalCash + totalTransfer;
+      let totalPengeluaran = pengeluaran.reduce((sum, d) => sum + d.harga, 0);
+      let totalBersih = overall - totalPengeluaran;
+
+      document.getElementById("totalCash").innerText = formatRupiah(totalCash);
+      document.getElementById("totalTransfer").innerText = formatRupiah(totalTransfer);
+      document.getElementById("overallTotal").innerText = formatRupiah(overall);
+      document.getElementById("totalPengeluaran").innerText = formatRupiah(totalPengeluaran);
+      document.getElementById("totalBersih").innerText = formatRupiah(totalBersih);
+    }
+
+    // Load dari Firebase
+    onValue(pemasukanRef, (snapshot) => {
+      let data = snapshot.val() || [];
+      let tbody = document.querySelector("#pemasukanTable tbody");
+      tbody.innerHTML = "";
+      data.forEach(d => {
+        let row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="date" value="${d.tanggal}" onchange="simpanSemua()"></td>
+          <td><input type="text" class="rupiah" value="${formatRupiah(d.cash)}" oninput="formatInput(this); simpanSemua()"></td>
+          <td><input type="text" class="rupiah" value="${formatRupiah(d.transfer)}" oninput="formatInput(this); simpanSemua()"></td>
+        `;
+        tbody.appendChild(row);
+      });
+      onValue(pengeluaranRef, (snapshot2) => {
+        let data2 = snapshot2.val() || [];
+        let tbody2 = document.querySelector("#pengeluaranTable tbody");
+        tbody2.innerHTML = "";
+        data2.forEach(d => {
+          let row = document.createElement("tr");
+          row.innerHTML = `
+            <td><input type="date" value="${d.tanggal}" onchange="simpanSemua()"></td>
+            <td>
+              <select onchange="simpanSemua()">
+                <option value="siang" ${d.waktu === "siang" ? "selected" : ""}>Siang</option>
+                <option value="malam" ${d.waktu === "malam" ? "selected" : ""}>Malam</option>
+              </select>
+            </td>
+            <td><input type="text" class="rupiah" value="${formatRupiah(d.harga)}" oninput="formatInput(this); simpanSemua()"></td>
+            <td><input type="text" value="${d.keterangan || ""}" oninput="simpanSemua()"></td>
+          `;
+          tbody2.appendChild(row);
+        });
+
+        hitungTotal(data, data2);
+      });
+    });
+
+    // Reset
+    window.resetData = function() {
+      if (confirm("Apakah kamu yakin ingin mereset semua data?")) {
+        remove(ref(db, "keuangan/"));
+      }
+    }
+  </script>
+</body>
+</html>
