@@ -346,6 +346,101 @@
             color: #ff69b4;
             margin-top: 3px;
         }
+        
+        .login-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ffc0cb 0%, #ffb6c1 50%, #ff69b4 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 400px;
+        }
+        
+        .login-box h2 {
+            color: #ff1493;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .login-box .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ffb6c1;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .login-box input:focus {
+            outline: none;
+            border-color: #ff69b4;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #ff69b4 0%, #ff1493 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 20, 147, 0.3);
+        }
+        
+        .error-message {
+            color: #dc3545;
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .logout-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff1493;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: #c71585;
+        }
     </style>
     
     <!-- Firebase SDK -->
@@ -353,7 +448,28 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
-    <div class="container">
+    <!-- Login Screen -->
+    <div id="loginContainer" class="login-container">
+        <div class="login-box">
+            <h2>🔐 Login</h2>
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" id="loginUsername" placeholder="Masukkan username">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="loginPassword" placeholder="Masukkan password">
+            </div>
+            <button class="btn-login" onclick="login()">Masuk</button>
+            <div id="errorMessage" class="error-message">Username atau password salah!</div>
+        </div>
+    </div>
+    
+    <!-- Logout Button -->
+    <button id="logoutBtn" class="logout-btn hidden" onclick="logout()">Logout</button>
+    
+    <!-- Main Container -->
+    <div class="container hidden" id="mainContainer">
         <h1>📦 Sistem Stok Barang</h1>
         
         <div class="stok-section">
@@ -457,9 +573,79 @@
         let tabAktif = 'cabang1';
         let itemYangDiedit = null;
         let itemYangDiambil = null;
+        let isLoggedIn = false;
+        
+        // Kredensial login
+        const validUsername = "dailyfood";
+        const validPassword = "270503";
+        
+        // Cek session login
+        function checkLogin() {
+            const session = sessionStorage.getItem('isLoggedIn');
+            if (session === 'true') {
+                isLoggedIn = true;
+                showMainApp();
+            }
+        }
+        
+        // Fungsi login
+        function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            const errorMessage = document.getElementById('errorMessage');
+            
+            if (username === validUsername && password === validPassword) {
+                isLoggedIn = true;
+                sessionStorage.setItem('isLoggedIn', 'true');
+                errorMessage.style.display = 'none';
+                showMainApp();
+            } else {
+                errorMessage.style.display = 'block';
+            }
+        }
+        
+        // Fungsi logout
+        function logout() {
+            if (confirm('Apakah Anda yakin ingin logout?')) {
+                isLoggedIn = false;
+                sessionStorage.removeItem('isLoggedIn');
+                document.getElementById('loginContainer').classList.remove('hidden');
+                document.getElementById('mainContainer').classList.add('hidden');
+                document.getElementById('logoutBtn').classList.add('hidden');
+                document.getElementById('loginUsername').value = '';
+                document.getElementById('loginPassword').value = '';
+            }
+        }
+        
+        // Tampilkan aplikasi utama
+        function showMainApp() {
+            document.getElementById('loginContainer').classList.add('hidden');
+            document.getElementById('mainContainer').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            loadData();
+        }
+        
+        // Enter key untuk login
+        document.addEventListener('DOMContentLoaded', function() {
+            checkLogin();
+            
+            document.getElementById('loginPassword').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
+            
+            document.getElementById('loginUsername').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('loginPassword').focus();
+                }
+            });
+        });
         
         // Fungsi untuk load data dari Firebase
         function loadData() {
+            if (!isLoggedIn) return;
+            
             // Load stok barang
             database.ref('stok-barang').on('value', (snapshot) => {
                 const data = snapshot.val();
@@ -492,6 +678,8 @@
         
         // Fungsi untuk save stok barang ke Firebase
         function saveStokBarang() {
+            if (!isLoggedIn) return;
+            
             database.ref('stok-barang').set(stokBarang)
                 .catch((error) => {
                     console.error('Gagal menyimpan stok:', error);
@@ -501,6 +689,8 @@
         
         // Fungsi untuk save riwayat ke Firebase
         function saveRiwayat() {
+            if (!isLoggedIn) return;
+            
             database.ref('riwayat-cabang1').set(riwayatCabang1)
                 .catch((error) => {
                     console.error('Gagal menyimpan riwayat cabang 1:', error);
